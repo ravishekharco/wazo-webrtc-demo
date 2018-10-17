@@ -9,26 +9,33 @@ function displayAuthError(error) {
 function authenticate(username, password, server) {
   apiClient = new window['@wazo/sdk'].WazoApiClient({server});
 
-  apiClient.auth.logIn({username, password}).then(function (data) {
+  apiClient.auth.logIn({
+      username: username,
+      password: password,
+      backend: 'xivo_user',
+      expiration: 48 * 60 * 60
+    }).then(function (data) {
     const userToken = data.token;
 
     apiClient.confd.getUser(userToken, data.uuid).then(function (user) {
-      const line = user.lines[0];
       $('#name').html(user.firstName ? user.firstName + ' ' + user.lastName : username);
-
-      apiClient.confd.getUserLineSip(data.token, data.uuid, line.id).then(function (sipLine) {
-        initializeWebRtc(sipLine, server);
-
-        onLogin();
-      }).catch(displayAuthError);
+      $.each(user.lines, function(key, value) {
+          apiClient.confd.getUserLineSip(data.token, data.uuid, user.lines[key].id).then(function (sipLine) {
+          	if (sipLine.username.indexOf("w") >= 0){
+          		initializeWebRtc(sipLine, server);
+                onLogin();
+          	}
+           }).catch(displayAuthError);    	  
+      });
     }).catch(displayAuthError);
   }).catch(displayAuthError);
 }
 
 function initializeWebRtc(sipLine, server) {
+	console.log("initializeWebRtc");
   webRtcClient = new window['@wazo/sdk'].WazoWebRTCClient({
     wsServers: ['wss://' + server + '/api/asterisk/ws'],
-    displayName: 'My dialer',
+    displayName: 'SaBRO Communications Hub',
     authorizationUser: sipLine.username,
     password: sipLine.secret,
     uri: sipLine.username + '@' + server,
@@ -36,6 +43,11 @@ function initializeWebRtc(sipLine, server) {
       audio: document.getElementById('audio')
     }
   });
+  console.log(webRtcClient);
+  console.log(sipLine.username);
+  console.log(sipLine.secret);
+  console.log(server);
+  console.log(document.getElementById('audio'));
 
   webRtcClient.on('ringing', openIncomingCallModal);
   webRtcClient.on('connected', onCallAccepted);
